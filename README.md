@@ -44,7 +44,7 @@ nycu-hw2-data/
 
 ## Usage
 
-### Step 1 — Install dependencies and check GPU
+### Install dependencies and check GPU
 
 Check that PyTorch and CUDA are available before starting.
 
@@ -59,7 +59,7 @@ if torch.cuda.is_available():
 
 ---
 
-### Step 2 — Imports and configuration
+### Imports and configuration
 
 Import all required libraries and set the dataset path.
 
@@ -93,7 +93,7 @@ STD  = [0.229, 0.224, 0.225]
 
 ---
 
-### Step 3 — Image preprocessing utilities
+### Image preprocessing utilities
 
 **Letterbox** resizes any image to a square canvas while preserving aspect ratio by padding with black borders.
 **rotate_boxes** recomputes bounding boxes after arbitrary-angle rotation by rotating all four corners and taking the enclosing rectangle.
@@ -147,7 +147,7 @@ def rotate_boxes(raw_boxes, angle_deg, ow, oh):
 
 ---
 
-### Step 4 — Dataset
+### Dataset
 
 `DigitDataset` loads COCO-format annotations and applies the full augmentation pipeline during training:
 horizontal flip, 90/180/270° rotation, fine-grained ±30° rotation, color jitter, random scale, random grayscale, and random erasing.
@@ -304,7 +304,7 @@ class TestDataset(Dataset):
 
 ---
 
-### Step 5 — Model utilities
+### Model utilities
 
 Helper functions used by the model:
 - `inverse_sigmoid`: used for reference point decoding in box prediction
@@ -369,7 +369,7 @@ class SwiGLU(nn.Module):
 
 ---
 
-### Step 6 — Multi-Scale Deformable Attention (MSDeformAttn)
+### Multi-Scale Deformable Attention (MSDeformAttn)
 
 The core component of the encoder. Instead of attending to all N tokens (expensive O(N²)),
 each position samples only `n_heads × n_levels × n_points` reference points across all feature levels.
@@ -452,7 +452,7 @@ class MSDeformAttn(nn.Module):
 
 ---
 
-### Step 7 — Encoder and Decoder layers
+### Encoder and Decoder layers
 
 **DeformableEncoderLayer**: Pre-Norm encoder layer using MSDeformAttn for efficient multi-scale self-attention.
 
@@ -518,7 +518,7 @@ class GlobalDecoderLayer(nn.Module):
 
 ---
 
-### Step 8 — HybridDETR model
+### HybridDETR model
 
 The full model combining all components:
 - ResNet-50 backbone extracts features at 4 scales
@@ -702,7 +702,7 @@ class HybridDETR(nn.Module):
 
 ---
 
-### Step 9 — Loss functions
+### Loss functions
 
 **HungarianMatcher** solves bipartite matching between predictions and ground truth using a cost matrix
 (classification + L1 bbox + GIoU, weights 2.0 / 5.0 / 4.0).
@@ -844,7 +844,7 @@ def to_dev(t, d):
 
 ---
 
-### Step 10 — Evaluation (mAP)
+### Evaluation (mAP)
 
 `evaluate_map` runs inference on the validation set and computes COCO mAP using pycocotools.
 `nms` applies class-agnostic Non-Maximum Suppression: all boxes compete together regardless of class,
@@ -938,7 +938,7 @@ print('All HybridDETR definitions loaded!')
 
 ---
 
-### Step 11 — Training loop
+### Training loop
 
 Sets up CFG, model, optimizer (AdamW), LR scheduler (warmup + step decay), and AMP scaler.
 Trains for up to 80 epochs with early stopping (patience 15).
@@ -1189,205 +1189,6 @@ if best_model_state is not None:
 
 ---
 
-### Step 12 — Plot training curves
-
-Plots total loss, validation loss components (CE / BBox / GIoU), and validation mAP over epochs.
-
-```python
-# ==================== Training Curves ====================
-import matplotlib.pyplot as plt
-
-def clean(lst):
-    return [v if (v is not None and not (isinstance(v, float) and math.isnan(v))) else None for v in lst]
-
-fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-
-axes[0].plot(clean(hist['train_loss']), label='Train', lw=2, color='#4C72B0')
-axes[0].plot(clean(hist['val_loss']),   label='Val',   lw=2, color='#DD8452')
-axes[0].set(xlabel='Epoch', ylabel='Loss', title='Total Loss')
-axes[0].legend(); axes[0].grid(alpha=0.3)
-
-axes[1].plot(clean(hist['val_ce']), label='CE',   lw=2)
-axes[1].plot(clean(hist['val_bb']), label='BBox', lw=2)
-axes[1].plot(clean(hist['val_gi']), label='GIoU', lw=2)
-axes[1].set(xlabel='Epoch', ylabel='Loss', title='Val Loss Components')
-axes[1].legend(); axes[1].grid(alpha=0.3)
-
-if hist.get('map_epochs'):
-    eps = hist['map_epochs']
-    axes[2].plot(eps, hist['map_5095'], label='mAP@0.5:0.95', lw=2.5, color='#2ca02c', marker='o', markersize=4)
-    axes[2].plot(eps, hist['map_50'],   label='mAP@0.5',       lw=2.5, color='#9467bd', marker='s', markersize=4, linestyle='--')
-    valid_maps = [(e,v) for e,v in zip(eps, hist['map_5095']) if v > 0]
-    if valid_maps:
-        best_ep, best_val = max(valid_maps, key=lambda x: x[1])
-        axes[2].axvline(best_ep, color='red', linestyle=':', lw=1.5, label=f'Best ep={best_ep} ({best_val:.4f})')
-    axes[2].axhline(0.28, color='orange', linestyle='--', lw=1.2, alpha=0.8, label='Weak 0.28')
-    axes[2].axhline(0.38, color='red',    linestyle='--', lw=1.2, alpha=0.8, label='Strong 0.38')
-    axes[2].set(xlabel='Epoch', ylabel='mAP', title='Validation mAP')
-    axes[2].legend(fontsize=8); axes[2].grid(alpha=0.3)
-    axes[2].set_ylim(0, max(max(hist['map_5095'], default=0) * 1.1, 0.45))
-    if valid_maps:
-        bv = max(v for _, v in valid_maps)
-        if bv >= 0.38:   print('★ Strong baseline!')
-        elif bv >= 0.28: print(f'Score ≈ {60 + (bv-0.28)/(0.38-0.28)*20:.1f} / 80')
-        else:            print('Below weak baseline')
-
-plt.tight_layout()
-plt.savefig(os.path.join(WORK_DIR, 'training_curves.png'), dpi=150, bbox_inches='tight')
-plt.show()
-
-```
-
----
-
-### Step 13 — Inference and submission
-
-Runs inference on the test set with confidence threshold 0.3 and class-agnostic NMS (IoU threshold 0.3).
-Outputs `submission.zip` containing `pred.json` in COCO format for CodaBench upload.
-
-```python
-# ==================== Final Inference + Submission ====================
-import zipfile
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-
-INFER_THRESHOLD = 0.3
-NMS_IOU = 0.3
-
-DIGIT  = {1:'0',2:'1',3:'2',4:'3',5:'4',6:'5',7:'6',8:'7',9:'8',10:'9'}
-COLORS = ['#e6194b','#3cb44b','#4363d8','#f58231','#911eb4',
-          '#42d4f4','#f032e6','#bfef45','#fabed4','#469990']
-
-model.eval()
-
-# ── Val mAP final check ──
-print('[Final Validation mAP]')
-final_5095, final_50 = evaluate_map(
-    model, os.path.join(DATA_ROOT,'valid.json'),
-    os.path.join(DATA_ROOT,'valid'),
-    CFG['img'], 8, device, CFG['amp'], CFG['map_threshold']
-)
-print(f'>>> mAP@0.5:0.95 = {final_5095:.4f}')
-print(f'>>> mAP@0.5      = {final_50:.4f}')
-if final_5095 >= 0.38:   print('★ Strong baseline!')
-elif final_5095 >= 0.28: print(f'Score ≈ {60 + (final_5095-0.28)/(0.38-0.28)*20:.1f} / 80')
-else:                    print('⚠ Below weak baseline')
-
-# ── Visualize 6 val samples ──
-print('\n[Visualize val samples]')
-val_ds_v = TestDataset(os.path.join(DATA_ROOT,'valid'), CFG['img'])
-import random as rnd
-idxs = rnd.sample(range(len(val_ds_v)), min(6, len(val_ds_v)))
-fig, axes = plt.subplots(2, 3, figsize=(15, 10))
-axes = axes.flatten()
-for pi, di in enumerate(idxs):
-    img_t, img_id, ow, oh, scale, px, py = val_ds_v[di]
-    with torch.no_grad():
-        with torch.amp.autocast('cuda', enabled=CFG['amp']):
-            out = model(img_t.unsqueeze(0).to(device))
-    probs = out['pred_logits'].softmax(-1)[0, :, :-1]
-    boxes = out['pred_boxes'][0]
-    sc, cl = probs.max(-1)
-    keep   = sc > INFER_THRESHOLD
-    orig   = Image.open(os.path.join(DATA_ROOT, 'valid', val_ds_v.f[di])).convert('RGB')
-    axes[pi].imshow(orig)
-    S = CFG['img']
-    n_det = 0
-    _bx, _sc, _cl = [], [], []
-    for s, c, bx in zip(sc[keep], cl[keep], boxes[keep]):
-        cx, cy, bw, bh = bx.tolist()
-        x = max(0.0, (cx - bw/2)*S - float(px)) / float(scale)
-        y = max(0.0, (cy - bh/2)*S - float(py)) / float(scale)
-        w = min(bw*S / float(scale), float(ow)-x)
-        h = min(bh*S / float(scale), float(oh)-y)
-        if w < 1 or h < 1: continue
-        _bx.append([x, y, x+w, y+h]); _sc.append(s.item()); _cl.append(int(c))
-    if _bx:
-        for ki in nms(torch.tensor(_bx), torch.tensor(_sc), iou_threshold=NMS_IOU):
-            x, y, x2, y2 = _bx[ki]; w, h = x2-x, y2-y
-            cat = _cl[ki] + 1; color = COLORS[(cat-1) % len(COLORS)]
-            axes[pi].add_patch(patches.Rectangle((x,y),w,h, lw=2, edgecolor=color, facecolor='none'))
-            axes[pi].text(x, max(0,y-4), f"{DIGIT[cat]}({_sc[ki]:.2f})",
-                         color='white', fontsize=8,
-                         bbox=dict(facecolor=color, alpha=0.8, pad=1))
-            n_det += 1
-    axes[pi].set_title(f'id={img_id} | {n_det} det', fontsize=9)
-    axes[pi].axis('off')
-plt.suptitle('Validation Detections', fontsize=12)
-plt.tight_layout()
-plt.savefig(os.path.join(WORK_DIR,'val_detections.png'), dpi=120, bbox_inches='tight')
-plt.show()
-
-# ── Test inference ──
-print('\n[Test Inference]')
-test_ds = TestDataset(os.path.join(DATA_ROOT,'test'), CFG['img'])
-test_loader = DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=2)
-print(f'Test images: {len(test_ds)}')
-
-results = []
-S = CFG['img']
-with torch.no_grad():
-    for batch in test_loader:
-        imgs, ids, ws, hs, scales, pxs, pys = batch
-        imgs = imgs.to(device)
-        with torch.amp.autocast('cuda', enabled=CFG['amp']):
-            out = model(imgs)
-        probs = out['pred_logits'].softmax(-1)
-        boxes = out['pred_boxes']
-        for b in range(imgs.shape[0]):
-            ow = float(ws[b]); oh = float(hs[b])
-            sc_v = float(scales[b]); px = float(pxs[b]); py = float(pys[b])
-            sc, cl = probs[b, :, :-1].max(-1)
-            keep   = sc > INFER_THRESHOLD
-            bx_list, sc_list, cl_list = [], [], []
-            for s, c, bx in zip(sc[keep], cl[keep], boxes[b][keep]):
-                cx, cy, bw, bh = bx.tolist()
-                x = max(0.0, (cx - bw/2)*S - px) / sc_v
-                y = max(0.0, (cy - bh/2)*S - py) / sc_v
-                w = min(bw*S / sc_v, ow - x)
-                h = min(bh*S / sc_v, oh - y)
-                if w > 1 and h > 1:
-                    bx_list.append([x, y, x+w, y+h])
-                    sc_list.append(float(s))
-                    cl_list.append(int(c))
-            if bx_list:
-                kept = nms(torch.tensor(bx_list), torch.tensor(sc_list), iou_threshold=NMS_IOU)
-                for ki in kept:
-                    x1b,y1b,x2b,y2b = bx_list[ki]
-                    results.append({
-                        'image_id':    int(ids[b]),
-                        'bbox':        [round(x1b,2), round(y1b,2),
-                                        round(x2b-x1b,2), round(y2b-y1b,2)],
-                        'score':       round(sc_list[ki], 6),
-                        'category_id': cl_list[ki] + 1,
-                    })
-
-print(f'Total detections: {len(results)}')
-from collections import Counter
-cnt = Counter(r['category_id'] for r in results)
-for cid in sorted(cnt): print(f'  digit "{DIGIT[cid]}": {cnt[cid]:,}')
-
-PRED = os.path.join(WORK_DIR, 'pred.json')
-with open(PRED, 'w') as f: json.dump(results, f)
-print(f'\nSaved -> {PRED}')
-
-zp = os.path.join(WORK_DIR, 'submission.zip')
-with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as z:
-    z.write(PRED, arcname='pred.json')
-print(f'Zip  -> {zp}')
-print('\nDownload submission.zip -> upload to CodaBench -> Add to Leaderboard')
-
-# Format check
-print(f'\n=== Format Check ===')
-print(f'Total boxes : {len(results)}')
-print(f'Sample      : {results[:2]}')
-img_ids  = set(r['image_id'] for r in results)
-test_ids = set(int(os.path.splitext(fn)[0]) for fn in os.listdir(os.path.join(DATA_ROOT,'test')))
-missing  = test_ids - img_ids
-print(f'Images with no detection : {len(missing)}')
-print(f'category_id range        : {min(r["category_id"] for r in results)} ~ {max(r["category_id"] for r in results)}')
-
-```
 
 ---
 
@@ -1399,4 +1200,4 @@ print(f'category_id range        : {min(r["category_id"] for r in results)} ~ {m
 | Best epoch | 72 |
 | Kaggle public score | 0.33 |
 
-![Leaderboard](leaderboard.png)
+![Leaderboard](assets/leaderboard.png)
