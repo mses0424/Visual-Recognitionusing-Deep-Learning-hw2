@@ -1399,4 +1399,4 @@ print(f'category_id range        : {min(r["category_id"] for r in results)} ~ {m
 | Best epoch | 72 |
 | Kaggle public score | 0.33 |
 
-![Leaderboard](assets/leaderboard.png)
+![Leaderboard](leaderboard.png)
