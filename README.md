@@ -1200,4 +1200,4 @@ if best_model_state is not None:
 | Best epoch | 72 |
 | Kaggle public score | 0.33 |
 
-![Leaderboard](assets/leaderboard.png)
+![Leaderboard](leaderboard.png)
